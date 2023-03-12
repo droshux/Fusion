@@ -7,17 +7,6 @@
 
 using namespace std;
 
-//A bunch of warning ignoring here because apparently clang hates sizeof
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wsizeof-pointer-div"
-#pragma clang diagnostic ignored "-Wsizeof-array-argument"
-template<typename T>
-int arraySize([[maybe_unused]] T arr[]) {
-    //return *(&arr + 1) - arr;
-    return sizeof arr / sizeof arr[0];
-}
-#pragma clang diagnostic pop
-
 template <typename T>
 [[maybe_unused]] bool contains([[maybe_unused]] vector<T> vec, [[maybe_unused]] const T & elem)
 {
@@ -33,9 +22,9 @@ template <typename T>
     return result;
 }
 template<class T>
-int getIndex(T (&v)[], T &K)
+int getIndex(T (&v)[], T &K, const unsigned int vSize)
 {
-    for (int i = 0; i < arraySize<T>(v); i++) {
+    for (int i = 0; i < vSize; i++) {
         T q=v[i];
         if (q == K)
             return i;
@@ -46,8 +35,8 @@ int getIndex(T (&v)[], T &K)
 class Card {
 public:
     bool isFaceUp;
-    int value;
-    int suit; //Not displayed, only used so that multiple cards with the same value can be equal
+    unsigned int value;
+    unsigned int suit; //Not displayed, only used so that multiple cards with the same value can be equal
     explicit Card(int v = 0, int s = 0) {
         value = v;
         suit = s;
@@ -74,31 +63,23 @@ bool Card::operator==(const Card& rhs) const {
     return value==rhs.value and suit==rhs.suit;
 }
 
-bool isValidFuse(Card cards[]) {
-    int numCards = arraySize(cards);
+Card cardsToFuse[3];
 
-    for (int i = 0; i < numCards; i++) if (cards[i].isNull()) return false; //Any fusions using null cards are invalid
+bool isValidFuse() {
+    int numCardsToFuse = sizeof cardsToFuse / sizeof cardsToFuse[0];
 
-    switch (numCards) {
-        case 1: {
-            ::printf("%s", "There is only one card\n");
-            return cards[0].value == 9; //The only card that fuses with itself is 9
-        }
-        case 2: {
-            return cards[0].value + cards[1].value == 9; //Two cards must sum to 9
-        }
-        case 3: {
-            int values[] = {cards[0].value, cards[1].value, cards[2].value};
-            sort(values, values + 3);
-            for (int i = 0; i < 3; i++)
-                if (values[i] != i + 11) {
-                    return false;
-                }
-            return true; //Three cards must be: 11, 12, 13
-        }
-        default:
-            ::printf("%s", "There are not 1 2 3 cards");
-            return false; //Only 1, 2 or 3 cards are allowed.
+    for (int i = 0; i < numCardsToFuse; i++) if (cardsToFuse[i].isNull()) numCardsToFuse -= 1; //Do not count null cards
+    if (numCardsToFuse != 3) {
+        const unsigned int sum = cardsToFuse[0].value + cardsToFuse[1].value + cardsToFuse[2].value;
+        return sum == 9; //If there are not 3 cards then they must sum to 9
+    } else {
+        unsigned int values[] = {cardsToFuse[0].value, cardsToFuse[1].value, cardsToFuse[2].value};
+        sort(values, values + 3);
+        for (int i = 0; i < 3; i++)
+            if (values[i] != i + 11) {
+                return false;
+            }
+        return true; //Three cardsToFuse must be: 11, 12, 13
     }
 }
 
@@ -113,7 +94,7 @@ public:
         name = std::move(s);
         score = 0;
         tens = 0;
-        lastCard = 0;
+        lastCard = -1;
         hand[0] = Card(9);
     }
 
@@ -122,32 +103,33 @@ public:
         hand[lastCard] = c;
     }
     void removeCard(Card c) {
-        int cardIndex = getIndex<Card>(hand, c);
-        for (int i = cardIndex; i < lastCard; i++) {
+        int cardIndex = getIndex<Card>(hand, c, lastCard+1);
+        for (int i = cardIndex; i <= lastCard; i++) {
             hand[i] = hand[i+1];
         }
         lastCard--;
     }
 
-    [[maybe_unused]] void Fuse(Card cards[], queue<Card>& deck, Card (&board)[]) {
-        int numCards = arraySize<Card>(cards);
+    [[maybe_unused]] void Fuse(queue<Card>& deck, Card (&board)[]) {
+        int numCardsToFuse = sizeof cardsToFuse / sizeof cardsToFuse[0];
 
         //Check for 10s
-        for (int i = 0; i < numCards; ++i)
-            if (cards[i].value == 10) this->tens++;
+        for (int i = 0; i < numCardsToFuse; ++i)
+            if (cardsToFuse[i].value == 10) this->tens++;
 
 
-        if (!isValidFuse(cards)) return; //If the cards are invalid do not fuse
+        if (!isValidFuse()) return; //If the cardsToFuse are invalid do not fuse
         ::printf("%s", "Fusion is valid!\n");
-        this->score += numCards; //Give the player a point for each card they fuse
+        this->score += numCardsToFuse; //Give the player a point for each card they fuse
 
-        for (int i = 0; i < numCards; i++) {
-            Card c = cards[i];
-            int CardIndex = getIndex<Card>(this->hand, c);
+        for (int i = 0; i < numCardsToFuse; i++) {
+            Card c = cardsToFuse[i];
+            if (c.isNull()) continue; //Ignore null cards.
+            int CardIndex = getIndex<Card>(this->hand, c, lastCard+1);
             if (CardIndex != -1) {
                 this->removeCard(c);
             } else {
-                CardIndex = getIndex<Card>(board, c);
+                CardIndex = getIndex<Card>(board, c, 9);
                 if (deck.empty()) board[CardIndex].value = 0;
                 else {
                     board[CardIndex] = deck.front();
@@ -167,9 +149,9 @@ int main() {
     queue<Card> d;
     Card b[] = {};
     Player p1 = Player("P1");
-    Card c[] = {p1.hand[0]};
-    p1.Fuse(c, d, b);
-    ::printf("%u", p1.lastCard);
-    ::printf("%u", p1.hand[0].print());
+    cardsToFuse[0] = Card(0);
+    cardsToFuse[1] = Card(1);
+    cardsToFuse[2] = Card(8);
+    p1.Fuse(d, b);
     return 0;
 }
