@@ -5,6 +5,7 @@
 #include <utility>
 #include <queue>
 #include <algorithm>
+#include <random>
 
 #define clrScreen "\033[2J\033[1;1H"
 
@@ -82,12 +83,15 @@ Card* BoardPos(int x, int y) { //Starts at 1
 }
 
 void InitialiseDeck() {
+    Card cards[52]; //Build up an array of cards
+    int index = 0;
     for (int s = 1; s <= 4; s++)
         for (int v = 1; v <= 13; v++) {
-            Card c = Card(v, s);
-            Deck.push(c);
+            cards[index] = Card(v, s);
+            index++;
         }
-    //TODO Shuffle the deck!
+    shuffle(&cards[0], &cards[51], random_device{}); //Shuffle the array
+    for (Card &c : cards) Deck.push(c); //Add every card to the deck
 }
 
 void InitialiseBoard() {
@@ -156,14 +160,18 @@ public:
             Card c = cardsToFuse[i];
             if (c.isNull()) continue; //Ignore null cards.
             int CardIndex = getIndex<Card>(this->hand, c, lastCard+1);
+            //Remove from hand nad remove/replenish from deck
             if (CardIndex != -1) {
                 this->removeCard(c);
             } else {
                 CardIndex = getIndex<Card>(board, c, 9);
                 if (Deck.empty()) board[CardIndex].value = 0;
                 else {
-                    board[CardIndex] = Deck.front();
-                    Deck.pop();
+                    Card replenish = Deck.front();
+                    if (!replenish.isNull()) {
+                        board[CardIndex] = replenish;
+                        Deck.pop();
+                    } else board[CardIndex] = Card(); //If the deck is empty use a null card
                 }
             }
         }
@@ -199,12 +207,12 @@ int getValidInt(int min, int max) {
 }
 
 void PlayerTurn(Player &p) {
-    cout << clrScreen;
 
     //Fusing loop
     while (true) {
         bool endTurn = false;
 
+        cout << clrScreen;
         //Display Board
         cout << p.name << "'s turn!\n" << "Board:\n\n  123\n";
         for (int y = 1; y <= 3; y++) {
@@ -217,7 +225,7 @@ void PlayerTurn(Player &p) {
         //Display Hand
         cout << "\nHand: ";
         for (int i = 0; i <= p.lastCard; i++) cout << p.hand[i].print() << " ";
-        cout << "\nYou have " << p.tens << " gems.\n";
+        cout << "\nYou have " << p.score << " points and " << p.tens << " gems.\n";
 
         for (Card &i : cardsToFuse) i = Card();//Initialise cardsToFuse to be null cards
         for (Card &i : cardsToFuse) {
@@ -268,18 +276,25 @@ void PlayerTurn(Player &p) {
         if (endTurn) break; //Part of exiting turn
 
         if (!isValidFuse()) { //If a fusion is invalid try again.
-            cout << "INVALID FUSION\n";
+            cout << "INVALID FUSION\nPress enter to try again...";
+            string unused;
+            getline(cin, unused, '\n');
             continue;
         }
 
         p.Fuse(); //FUSE!!!
+
+        Card newCard = Deck.front();
+        newCard.isFaceUp = true;
+        if (!newCard.isNull()) p.addCard(newCard); //Draw a new card if the deck isn't empty
 
         cout << "You score is now: " << p.score << "!\n";
     }
 }
 
 bool CheckForGameEnd(Player &p1, Player &p2) {
-    if (p1.tens >= 4 || p2.tens >= 4) return true; //End the game if someone gets all 10s
+    if (p1.lastCard < 0 || p2.lastCard < 0) return true;//End the game if someone empties their cards
+    if (p1.tens >= 4 || p2.tens >= 4) return true; //or if they get all tens
 
     //Check for empty deck
     if (!Deck.empty()) return false; //Game can't end until the deck is empty
@@ -294,6 +309,10 @@ Player* DecideWinner(Player &p1, Player &p2) {
     //If you have all 4 tens you win
     if (p1.tens >= 4) return &p1;
     if (p2.tens >= 4) return &p2;
+
+    //Or if you have emptied your hand
+    if (p1.lastCard < 0) return &p1;
+    if (p2.lastCard < 0) return &p2;
 
     const unsigned int p1Score = p1.score + 3 * p1.tens; //Tens count as 3 points
     const unsigned int p2Score = p2.score + 3 * p2.tens;
@@ -314,9 +333,9 @@ void Game() {
     cout << "Welcome to FUSION!\n";
     string p1Name, p2Name;
     cout << "Please enter player 1's name: ";
-    cin >> p1Name;
+    getline(cin, p1Name, '\n');
     cout << "\nPlease enter player 2's name: ";
-    cin >> p2Name;
+    getline(cin, p2Name, '\n');
     Player P1 = Player(p1Name);
     Player P2 = Player(p2Name);
 
